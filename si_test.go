@@ -41,14 +41,18 @@ func TestFormatAppend(t *testing.T) {
 		21: {V: 999, Base: PrefixMilli, Prec: 3, Want: "999m"},
 		22: {V: 999_999, Base: PrefixMilli, Prec: 6, Want: "999.999"},
 		23: {V: 9_999_999, Base: PrefixMilli, Prec: 7, Want: "9.999999k"},
-		// Rounding events.
-		24: {V: 999, Base: PrefixMicro, Prec: 2, Want: "1m"},
-		25: {V: 999, Base: PrefixMilli, Prec: 2, Want: "1"},
+		// Normal rounding events.
+		24: {V: 12345, Base: PrefixMilli, Prec: 4, Want: "12.35"},
+		25: {V: 1500, Base: PrefixMilli, Prec: 1, Want: "2"},
+		// 26: {V: 15, Base: PrefixMilli, Prec: 2, Want: "15m"},
+		// Extraordinary base-crossing rounding events.
+		27: {V: 999_999, Base: PrefixMicro, Prec: 2, Want: "1"},
+		28: {V: 999_999, Base: PrefixMilli, Prec: 2, Want: "1k"},
 	}
 	s := make([]byte, 24)
 	for i, test := range tests {
 		if test.Prec == 0 {
-			continue // Undeclared
+			continue // Undeclared or commented.
 		}
 		s = AppendFixed(s[:0], test.V, test.Base, 'f', test.Prec)
 		if string(s) != test.Want {
@@ -68,7 +72,9 @@ func TestFormatAppend_precorpus(t *testing.T) {
 		Base Prefix
 		Prec int
 		Want string
-	}{}
+	}{
+		// {V: 15, Base: PrefixMilli, Prec: 1, Want: "123.5"},
+	}
 	s := make([]byte, 24)
 	for i, test := range tests {
 		if test.Prec == 0 {

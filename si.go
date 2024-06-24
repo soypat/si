@@ -260,8 +260,8 @@ func AppendFixed[T fixed](b []byte, value T, base Prefix, fmt byte, prec int) []
 	switch {
 	case fmt != 'f':
 		return append(b, "<si!INVALID FMT>"...)
-	case prec < 0:
-		return append(b, "<si!NEGATIVE PREC>"...)
+	case prec <= 0:
+		return append(b, "<si!LESS-EQ-ZERO PREC>"...)
 	case !base.IsValid():
 		return append(b, "<si!BAD BASE>"...)
 	case value == 0:
@@ -284,8 +284,9 @@ func AppendFixed[T fixed](b []byte, value T, base Prefix, fmt byte, prec int) []
 
 	// We now prepare the value by trimming digits after the precision cutoff.
 	// We need to trim when excess > 0.
+	// TODO: Decide on whether to keep forced 3-sigfig formatting when only at 3 digits corresponding to `backDigits != 0` condition.
 	excess := backDigits + frontDigits - prec
-	if excess > 0 {
+	if excess > 0 && backDigits != 0 {
 		x := v64 % iLogTable[excess]
 		rlim := iLogRoundTable[excess]
 		roundUp := x >= rlim
