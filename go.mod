@@ -1,3 +1,3 @@
-module github.com/YOURUSER/YOURREPONAME
+module github.com/soypat/si
 
 go 1.20
