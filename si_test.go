@@ -57,6 +57,7 @@ func TestFormatAppend(t *testing.T) {
 		// Negative equivalent
 		s = AppendFixed(s[:0], -test.V, test.Base, 'f', test.Prec)
 		if s[0] != '-' || string(s[1:]) != test.Want {
+			t.Errorf("case %d: want -%s, got %s", i, test.Want, s)
 		}
 	}
 }
