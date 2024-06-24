@@ -23,19 +23,48 @@ func TestFormatAppend(t *testing.T) {
 		8: {V: 100_000_000, Base: PrefixMilli, Prec: 4, Want: "100k"},
 		// Augment Prefix to No Prefix with decimals.
 		9:  {V: 1234, Base: PrefixMilli, Prec: 4, Want: "1.234"},
-		10: {V: 12345, Base: PrefixMilli, Prec: 4, Want: "12.34"},
-		11: {V: 123456, Base: PrefixMilli, Prec: 4, Want: "123.4"},
+		10: {V: 12344, Base: PrefixMilli, Prec: 4, Want: "12.34"},
+		11: {V: 123444, Base: PrefixMilli, Prec: 4, Want: "123.4"},
 		// Augment low to high prefix with decimals.
-		12: {V: 1_234_567, Base: PrefixMilli, Prec: 4, Want: "1.234k"},
-		13: {V: 12_345_678, Base: PrefixMilli, Prec: 4, Want: "12.34k"},
-		14: {V: 123_456_789, Base: PrefixMilli, Prec: 4, Want: "123.4k"},
+		12: {V: 1_234_444, Base: PrefixMilli, Prec: 4, Want: "1.234k"},
+		13: {V: 12_344_444, Base: PrefixMilli, Prec: 4, Want: "12.34k"},
+		14: {V: 123_444_444, Base: PrefixMilli, Prec: 4, Want: "123.4k"},
 		// Augment low to high prefix with decimal chop-off.
 		15: {V: 1_234_567, Base: PrefixMilli, Prec: 1, Want: "1k"},
 		16: {V: 12_345_678, Base: PrefixMilli, Prec: 2, Want: "12k"},
 		17: {V: 123_456_789, Base: PrefixMilli, Prec: 3, Want: "123k"},
+		// Rounding simple.
+		18: {V: 1500, Base: PrefixMilli, Prec: 1, Want: "2"},
 	}
 	s := make([]byte, 24)
 	for i, test := range tests {
+		if test.Prec == 0 {
+			continue // Undeclared
+		}
+		s = AppendFixed(s[:0], test.V, test.Base, 'f', test.Prec)
+		if string(s) != test.Want {
+			t.Errorf("case %d: want %s, got %s", i, test.Want, s)
+		}
+	}
+}
+
+func TestFormatAppend_precorpus(t *testing.T) {
+	var tests = []struct {
+		V    int64
+		Base Prefix
+		Prec int
+		Want string
+	}{
+		{V: 1500, Base: PrefixMilli, Prec: 1, Want: "2"},
+		// {V: 123_444_444, Base: PrefixMilli, Prec: 4, Want: "123.4k"},
+		// {V: 1234, Base: PrefixMilli, Prec: 4, Want: "1.234"},
+		// {V: 1500, Base: PrefixMilli, Prec: 1, Want: "2"},
+	}
+	s := make([]byte, 24)
+	for i, test := range tests {
+		if test.Prec == 0 {
+			continue // Undeclared
+		}
 		s = AppendFixed(s[:0], test.V, test.Base, 'f', test.Prec)
 		if string(s) != test.Want {
 			t.Errorf("case %d: want %s, got %s", i, test.Want, s)

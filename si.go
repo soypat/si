@@ -262,10 +262,10 @@ func AppendFixed[T fixed](b []byte, value T, base Prefix, fmt byte, prec int) []
 		return append(b, "<si!INVALID FMT>"...)
 	case prec < 0:
 		return append(b, "<si!NEGATIVE PREC>"...)
-	case value == 0:
-		return append(b, '0')
 	case !base.IsValid():
 		return append(b, "<si!BAD BASE>"...)
+	case value == 0:
+		return append(b, '0')
 	}
 
 	isNegative := value < 0
@@ -277,29 +277,41 @@ func AppendFixed[T fixed](b []byte, value T, base Prefix, fmt byte, prec int) []
 
 	log10mod3 := log10 % 3
 	frontDigits := (log10mod3) + 1
-	allDigits := log10 + 1
-	divDiff := log10 - log10mod3
-	front := v64 / iLogTable[divDiff]
-	if front == 0 {
-		frontDigits = 0 // Underflowed format front.
+	backDigits := log10 - log10mod3
+	if v64 < iLogTable[backDigits] {
+		frontDigits = 0
 	}
-	var back int64
-	if frontDigits == 0 || (allDigits > 3 && prec > frontDigits) {
-		back = v64 % iLogTable[divDiff]
-		backDigits := divDiff
-		excess := backDigits + frontDigits - prec
-		if excess > 0 {
-			back /= iLogTable[excess]
-		}
+
+	// We now prepare the value by trimming digits after the precision cutoff.
+	// We need to trim when excess > 0.
+	excess := backDigits + frontDigits - prec
+	if excess > 0 {
+		x := v64 % iLogTable[excess]
+		rlim := iLogRoundTable[excess]
+		roundUp := x >= rlim
+		v64 /= iLogTable[excess]
+		v64 += int64(b2i(roundUp))
 	}
+
 	if isNegative {
 		b = append(b, '-')
 	}
-	b = strconv.AppendInt(b, front, 10)
-	if back != 0 {
-		b = append(b, '.')
-		b = strconv.AppendInt(b, back, 10)
+
+	var buf [20]byte
+	prevlen := len(b)
+	b = strconv.AppendInt(b, v64, 10)
+	last := append(buf[:0], b[prevlen+frontDigits:]...)
+	b = b[:prevlen+frontDigits]
+
+	for i := range last {
+		// Only print if has non-zero part.
+		if last[i] != '0' {
+			b = append(b[:prevlen+frontDigits], '.')
+			b = append(b, last...)
+			break
+		}
 	}
+
 	// Calculate new base.
 	base += Prefix(log10 - log10mod3)
 	if base != PrefixNone {
@@ -339,4 +351,34 @@ var iLogTable = [...]int64{
 	10_000_000_000_000_000,
 	100_000_000_000_000_000,
 	1_000_000_000_000_000_000,
+}
+
+var iLogRoundTable = [...]int64{
+	0,
+	5,
+	50,
+	500,
+	5_000,
+	50_000,
+	500_000,
+	5_000_000,
+	50_000_000,
+	500_000_000,
+	5_000_000_000,
+	50_000_000_000,
+	500_000_000_000,
+	5_000_000_000_000,
+	50_000_000_000_000,
+	500_000_000_000_000,
+	5_000_000_000_000_000,
+	50_000_000_000_000_000,
+	500_000_000_000_000_000,
+	5_000_000_000_000_000_000,
+}
+
+func b2i(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
