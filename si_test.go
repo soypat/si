@@ -35,6 +35,15 @@ func TestFormatAppend(t *testing.T) {
 		17: {V: 123_456_789, Base: PrefixMilli, Prec: 3, Want: "123k"},
 		// Rounding simple.
 		18: {V: 1500, Base: PrefixMilli, Prec: 1, Want: "2"},
+		19: {V: 1555, Base: PrefixMilli, Prec: 3, Want: "1.56"},
+		20: {V: 1550, Base: PrefixMilli, Prec: 2, Want: "1.6"},
+		// Rounding close calls.
+		21: {V: 999, Base: PrefixMilli, Prec: 3, Want: "999m"},
+		22: {V: 999_999, Base: PrefixMilli, Prec: 6, Want: "999.999"},
+		23: {V: 9_999_999, Base: PrefixMilli, Prec: 7, Want: "9.999999k"},
+		// Rounding events.
+		24: {V: 999, Base: PrefixMicro, Prec: 2, Want: "1m"},
+		25: {V: 999, Base: PrefixMilli, Prec: 2, Want: "1"},
 	}
 	s := make([]byte, 24)
 	for i, test := range tests {
@@ -45,6 +54,10 @@ func TestFormatAppend(t *testing.T) {
 		if string(s) != test.Want {
 			t.Errorf("case %d: want %s, got %s", i, test.Want, s)
 		}
+		// Negative equivalent
+		s = AppendFixed(s[:0], -test.V, test.Base, 'f', test.Prec)
+		if s[0] != '-' || string(s[1:]) != test.Want {
+		}
 	}
 }
 
@@ -54,12 +67,7 @@ func TestFormatAppend_precorpus(t *testing.T) {
 		Base Prefix
 		Prec int
 		Want string
-	}{
-		{V: 1500, Base: PrefixMilli, Prec: 1, Want: "2"},
-		// {V: 123_444_444, Base: PrefixMilli, Prec: 4, Want: "123.4k"},
-		// {V: 1234, Base: PrefixMilli, Prec: 4, Want: "1.234"},
-		// {V: 1500, Base: PrefixMilli, Prec: 1, Want: "2"},
-	}
+	}{}
 	s := make([]byte, 24)
 	for i, test := range tests {
 		if test.Prec == 0 {

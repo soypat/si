@@ -278,7 +278,7 @@ func AppendFixed[T fixed](b []byte, value T, base Prefix, fmt byte, prec int) []
 	log10mod3 := log10 % 3
 	frontDigits := (log10mod3) + 1
 	backDigits := log10 - log10mod3
-	if v64 < iLogTable[backDigits] {
+	if log10 < backDigits {
 		frontDigits = 0
 	}
 
@@ -291,6 +291,17 @@ func AppendFixed[T fixed](b []byte, value T, base Prefix, fmt byte, prec int) []
 		roundUp := x >= rlim
 		v64 /= iLogTable[excess]
 		v64 += int64(b2i(roundUp))
+		newIlog10 := ilog10(v64) + excess
+		if newIlog10 != log10 {
+			// Rounding where frontdigits overflow.
+			log10 = newIlog10
+			log10mod3 = log10 % 3
+			frontDigits = log10mod3 + 1
+			backDigits = log10 - log10mod3
+			if log10 < backDigits {
+				frontDigits = 0
+			}
+		}
 	}
 
 	if isNegative {
