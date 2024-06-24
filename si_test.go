@@ -36,7 +36,7 @@ func TestFormatAppend(t *testing.T) {
 	}
 	s := make([]byte, 24)
 	for i, test := range tests {
-		s = formatAppend(s[:0], test.V, test.Base, 'f', test.Prec)
+		s = AppendFixed(s[:0], test.V, test.Base, 'f', test.Prec)
 		if string(s) != test.Want {
 			t.Errorf("case %d: want %s, got %s", i, test.Want, s)
 		}

@@ -11,18 +11,21 @@ const (
 )
 
 // NewDimension creates a new dimension from the given exponents.
-func NewDimension(length, mass, time, temperature, electricCurrent, luminosity, amount int) (Dimension, error) {
-	if isDimOOB(length) || isDimOOB(mass) || isDimOOB(time) ||
-		isDimOOB(temperature) || isDimOOB(electricCurrent) ||
-		isDimOOB(luminosity) || isDimOOB(amount) {
+func NewDimension(Length, Mass, Time, Temperature, ElectricCurrent, Luminosity, Amount int) (Dimension, error) {
+	if isDimOOB(Length) || isDimOOB(Mass) || isDimOOB(Time) ||
+		isDimOOB(Temperature) || isDimOOB(ElectricCurrent) ||
+		isDimOOB(Luminosity) || isDimOOB(Amount) {
 		return Dimension{}, errors.New("overflow of dimension storage")
 	}
 	return Dimension{
 		dims: [7]int16{
-			int16(length), int16(mass),
-			int16(time), int16(temperature),
-			int16(electricCurrent), int16(luminosity),
-			int16(amount),
+			0: int16(Length),
+			1: int16(Mass),
+			2: int16(Time),
+			3: int16(Temperature),
+			4: int16(ElectricCurrent),
+			5: int16(Luminosity),
+			6: int16(Amount),
 		},
 	}, nil
 }
@@ -53,26 +56,52 @@ var exprune = [10]rune{
 	9: '⁹',
 }
 
-// String returns a human readable representation of the dimension.
-func (d Dimension) String() string {
-	if d.IsDimensionless() {
-		return ""
-	}
-	s := make([]byte, 0, 8)
-	return string(d.appendf(s))
+var (
+	defaultDimFormatter, _  = NewDimensionFormatter("m", "kg", "s", "K", "A", "cd", "mol")
+	abstractDimFormatter, _ = NewDimensionFormatter("L", "M", "T", "K", "I", "J", "N")
+)
+
+// DefaultDimensionFormatter returns the SI formatter.
+func DefaultDimensionFormatter() DimensionFormatter {
+	return defaultDimFormatter
 }
 
-func (d Dimension) appendf(b []byte) []byte {
-	app := func(b []byte, char byte, dim int) []byte {
-		if dim == 0 {
-			return b
-		}
-		b = append(b, char)
-		if dim == 1 {
-			return b
-		}
+// DimensionFormatter is an arrangement of unit representations.
+type DimensionFormatter struct {
+	fmts [7]string
+}
 
-		var buf [20]byte
+// NewDimensionFormatter creates a new dimension formatter.
+func NewDimensionFormatter(Length, Mass, Time, Temperature, Current, Luminosity, Amount string) (DimensionFormatter, error) {
+	if Length == "" || Mass == "" || Time == "" || Temperature == "" || Current == "" || Luminosity == "" || Amount == "" {
+		return DimensionFormatter{}, errors.New("empty format string")
+	}
+	return DimensionFormatter{
+		[7]string{
+			0: Length,
+			1: Mass,
+			2: Time,
+			3: Temperature,
+			4: Current,
+			5: Luminosity,
+			6: Amount,
+		},
+	}, nil
+}
+
+// AppendFormat formats a dimension with
+func (df DimensionFormatter) AppendFormat(b []byte, dim Dimension) []byte {
+	// Size of this buffer should fit -32767 (MaxInt16)
+	var buf [8]byte
+	for i := range df.fmts {
+		dim := dim.dims[i]
+		if dim == 0 {
+			continue
+		}
+		b = append(b, df.fmts[i]...)
+		if dim == 1 {
+			continue
+		}
 		numbuf := strconv.AppendInt(buf[:0], int64(dim), 10)
 		if numbuf[0] == '-' {
 			b = utf8.AppendRune(b, negexp)
@@ -85,16 +114,17 @@ func (d Dimension) appendf(b []byte) []byte {
 			}
 			b = utf8.AppendRune(b, exprune[offset])
 		}
-		return b
 	}
-	b = app(b, 'L', d.ExpLength())
-	b = app(b, 'M', d.ExpMass())
-	b = app(b, 'T', d.ExpTime())
-	b = app(b, 'K', d.ExpTemperature())
-	b = app(b, 'I', d.ExpCurrent())
-	b = app(b, 'J', d.ExpLuminosity())
-	b = app(b, 'N', d.ExpAmount())
 	return b
+}
+
+// String returns a human readable representation of the dimension using abstract unit letters (LMTKIJN).
+func (d Dimension) String() string {
+	if d.IsDimensionless() {
+		return ""
+	}
+	s := abstractDimFormatter.AppendFormat(make([]byte, 0, 8), d)
+	return string(s)
 }
 
 // IsDimensionless returns true if d is dimensionless, that is to say all dimension exponents are zero.
@@ -164,8 +194,11 @@ func DivDim(a, b Dimension) (Dimension, error) {
 	return MulDim(a, b.Inv())
 }
 
+// Prefix represents a unit prefix used to specify the magnitude of a quantity.
+// i.e: PrefixKilo corresponds to 'k' character used to denote a multiplier of 1000 to the unit it is prefixed to.
 type Prefix int8
 
+// Package unit prefix definitions.
 const (
 	PrefixAtto Prefix = -18 + iota*3
 	PrefixFemto
@@ -215,10 +248,15 @@ func (p Prefix) Character() (s rune) {
 
 // fixed point representation integer supported by this package.
 type fixed interface {
-	~int64
+	~int64 | ~int32
 }
 
-func formatAppend[T fixed](b []byte, value T, base Prefix, fmt byte, prec int) []byte {
+// AppendFixed formats a fixed-point number with a given magnitude base and
+// appends it's representation to the argument buffer.
+//
+//	"123.456k" for value=123456, base=PrefixNone, prec=6
+//	"123k" for value=123456, base=PrefixNone, prec=3
+func AppendFixed[T fixed](b []byte, value T, base Prefix, fmt byte, prec int) []byte {
 	switch {
 	case fmt != 'f':
 		return append(b, "<si!INVALID FMT>"...)
@@ -270,6 +308,17 @@ func formatAppend[T fixed](b []byte, value T, base Prefix, fmt byte, prec int) [
 	return b
 }
 
+// ilog10 returns the integer logarithm base 10 of v, which
+// can be interpreted as the quanity of digits in the number in base 10 minus one.
+func ilog10(v int64) int {
+	for i, l := range iLogTable {
+		if v < l {
+			return i - 1
+		}
+	}
+	return len(iLogTable)
+}
+
 var iLogTable = [...]int64{
 	1,
 	10,
@@ -290,15 +339,4 @@ var iLogTable = [...]int64{
 	10_000_000_000_000_000,
 	100_000_000_000_000_000,
 	1_000_000_000_000_000_000,
-}
-
-// ilog10 returns the integer logarithm base 10 of v, which
-// can be interpreted as the quanity of digits in the number in base 10 minus one.
-func ilog10(v int64) int {
-	for i, l := range iLogTable {
-		if v < l {
-			return i - 1
-		}
-	}
-	return len(iLogTable)
 }
