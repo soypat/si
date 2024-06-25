@@ -2,6 +2,7 @@ package si
 
 import (
 	"errors"
+	"math"
 	"strconv"
 	"unicode/utf8"
 )
@@ -214,6 +215,39 @@ const (
 	PrefixExa
 )
 
+// RuneToPrefix interprets the argument rune as an SI prefix.
+// It does not parse PrefixNone.
+func RuneToPrefix(r rune) (pfx Prefix, err error) {
+	switch r {
+	case 'a':
+		pfx = PrefixAtto
+	case 'f':
+		pfx = PrefixFemto
+	case 'p':
+		pfx = PrefixPico
+	case 'n':
+		pfx = PrefixNano
+	case 'u', 'μ':
+		pfx = PrefixMicro
+	case 'm':
+		pfx = PrefixMilli
+	case 'k':
+		pfx = PrefixKilo
+	case 'M':
+		pfx = PrefixMega
+	case 'G':
+		pfx = PrefixGiga
+	case 'T':
+		pfx = PrefixTera
+	case 'E':
+		pfx = PrefixExa
+	default:
+		err = errUnknownPrefix
+		err = errors.New("unknown prefix " + string(r))
+	}
+	return pfx, err
+}
+
 // IsValid checks if the prefix is one of the supported standard SI prefixes or the zero base prefix.
 func (p Prefix) IsValid() bool {
 	return p == PrefixNone || p.Character() != ' '
@@ -251,18 +285,18 @@ type fixed interface {
 	~int64 | ~int32
 }
 
-// AppendFixed formats a fixed-point number with a given magnitude base and
+// AppendFixed formats a fixed-point number with a given magnitude base units and
 // appends it's representation to the argument buffer.
 //
-//	"123.456k" for value=123456, base=PrefixNone, prec=6
-//	"123k" for value=123456, base=PrefixNone, prec=3
-func AppendFixed[T fixed](b []byte, value T, base Prefix, fmt byte, prec int) []byte {
+//	"123.456k" for value=123456, baseUnits=PrefixNone, prec=6
+//	"123k" for value=123456, baseUnits=PrefixNone, prec=3
+func AppendFixed[T fixed](b []byte, value T, baseUnits Prefix, fmt byte, prec int) []byte {
 	switch {
 	case fmt != 'f':
 		return append(b, "<si!INVALID FMT>"...)
 	case prec <= 0:
 		return append(b, "<si!LESS-EQ-ZERO PREC>"...)
-	case !base.IsValid():
+	case !baseUnits.IsValid():
 		return append(b, "<si!BAD BASE>"...)
 	case value == 0:
 		return append(b, '0')
@@ -287,10 +321,10 @@ func AppendFixed[T fixed](b []byte, value T, base Prefix, fmt byte, prec int) []
 	// TODO: Decide on whether to keep forced 3-sigfig formatting when only at 3 digits corresponding to `backDigits != 0` condition.
 	excess := backDigits + frontDigits - prec
 	if excess > 0 && backDigits != 0 {
-		x := v64 % iLogTable[excess]
+		x := v64 % powerOf10[excess]
 		rlim := iLogRoundTable[excess]
 		roundUp := x >= rlim
-		v64 /= iLogTable[excess]
+		v64 /= powerOf10[excess]
 		v64 += int64(b2i(roundUp))
 		newIlog10 := ilog10(v64) + excess
 		if newIlog10 != log10 {
@@ -325,25 +359,115 @@ func AppendFixed[T fixed](b []byte, value T, base Prefix, fmt byte, prec int) []
 	}
 
 	// Calculate new base.
-	base += Prefix(log10 - log10mod3)
-	if base != PrefixNone {
-		b = append(b, base.String()...)
+	baseUnits += Prefix(log10 - log10mod3)
+	if baseUnits != PrefixNone {
+		b = append(b, baseUnits.String()...)
 	}
 	return b
+}
+
+// ParseFixed parses a decimal point representation with or without unit prefix
+// and converts it to a fixed point representation with `baseUnits` as the base units.
+func ParseFixed(s string, baseUnits Prefix) (value int64, readBytes int, err error) {
+	var buf [20]byte
+	// s indices.
+	var dotPos, wholeEnd, bufPtr int = -1, 0, 0
+	var seenPlus bool
+	var d decimal
+CHARLOOP:
+	for wholeEnd < len(s) {
+		c := s[wholeEnd]
+		if '0' <= c && c <= '9' {
+			if bufPtr >= len(buf) {
+				err = errOverflowsInt64
+				break CHARLOOP
+			} else if bufPtr == 0 && dotPos < 0 && c == '0' {
+				// Skip zeros preceding decimal point.
+				wholeEnd++
+				continue
+			}
+			buf[bufPtr] = c
+			bufPtr++
+			wholeEnd++
+			continue
+		}
+		switch c {
+		case '.':
+			if dotPos >= 0 {
+				err = errDotDot
+				break CHARLOOP
+			}
+			dotPos = wholeEnd
+		case '+':
+			if seenPlus {
+				err = errPlusPlus
+				break CHARLOOP
+			} else if d.neg {
+				err = errPlusMinus
+				break CHARLOOP
+			} else if wholeEnd != 0 {
+				err = errNaN
+				break CHARLOOP
+			}
+			seenPlus = true
+		case '-':
+			if d.neg {
+				err = errMinusMinus
+				break CHARLOOP
+			} else if seenPlus {
+				err = errPlusPlus
+				break CHARLOOP
+			} else if wholeEnd != 0 {
+				err = errNaN
+				break CHARLOOP
+			}
+			d.neg = true
+		default:
+			break CHARLOOP
+		}
+		wholeEnd++
+	}
+	if err != nil {
+		return 0, 0, err
+	}
+	readBytes = wholeEnd
+	var incomingPrefix Prefix
+	if wholeEnd < len(s) {
+		r, n := utf8.DecodeRuneInString(s[readBytes:])
+		incomingPrefix, err = RuneToPrefix(r)
+		if err != nil {
+			return 0, 0, err
+		}
+		readBytes += n
+	}
+	// Calculate exponent modifier from decimal point.
+	// Where bufPtr is length of number, dotPos is position of decimal w.r.t start.
+	//  xxx.xxxxxx gives dotPos=3, bufPtr=3+6 -> exp=-6
+	d.exp = -(bufPtr - dotPos)
+	d.base, err = strconv.ParseUint(string(buf[:bufPtr]), 10, 64)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	v, overflow := dtoi(d, int(incomingPrefix-baseUnits))
+	if overflow {
+		return 0, 0, errOverflowsInt64
+	}
+	return v, readBytes, nil
 }
 
 // ilog10 returns the integer logarithm base 10 of v, which
 // can be interpreted as the quanity of digits in the number in base 10 minus one.
 func ilog10(v int64) int {
-	for i, l := range iLogTable {
+	for i, l := range powerOf10 {
 		if v < l {
 			return i - 1
 		}
 	}
-	return len(iLogTable)
+	return len(powerOf10)
 }
 
-var iLogTable = [...]int64{
+var powerOf10 = [...]int64{
 	1,
 	10,
 	100,
@@ -393,4 +517,82 @@ func b2i(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+/*
+Logic below ripped directly from https://github.com/periph/conn/blob/main/physic/units.go
+Modified to avoid ongoing heap allocations and export ParseError for user convenience.
+*/
+
+// Decimal is the representation of decimal number.
+type decimal struct {
+	// base hold the significant digits.
+	base uint64
+	// exponent is the left or right decimal shift. (powers of ten).
+	exp int
+	// neg it true if the number is negative.
+	neg bool
+}
+type ParseError struct {
+	error
+}
+
+func pe(s string) *ParseError {
+	return &ParseError{error: errors.New(s)}
+}
+
+func (pe *ParseError) Unwrap() error { return pe.error }
+
+var (
+	errPlusMinus              = pe("contains both plus and minus")
+	errMinusMinus             = pe("contains multiple minus symbols")
+	errNaN                    = pe("not a number")
+	errPlusPlus               = pe("contains multiple plus symbols")
+	errDotDot                 = pe("contains multiple decimal points")
+	errOverflowsInt64         = pe("exceeds maximum")
+	errOverflowsInt64Negative = pe("exceeds minimum")
+	errUnknownPrefix          = pe("unknown SI prefix")
+)
+
+// Converts from decimal to int64.
+//
+// Scale is combined with the decimal exponent to maximise the resolution and is
+// in powers of ten.
+//
+// Returns true if the value overflowed.
+func dtoi(d decimal, scale int) (int64, bool) {
+	// Get the total magnitude of the number.
+	// a^x * b^y = a*b^(x+y) since scale is of the order unity this becomes
+	// 1^x * b^y = b^(x+y).
+	// mag must be positive to use as index in to powerOf10 array.
+	u := d.base
+	mag := d.exp + scale
+	if mag < 0 {
+		mag = -mag
+	}
+	var n int64
+	if mag > 18 {
+		return 0, true
+	}
+	// Divide is = 10^(-mag)
+	switch {
+	case d.exp+scale < 0:
+		u = (u + uint64(powerOf10[mag])/2) / uint64(powerOf10[mag])
+	case mag == 0:
+		if u > math.MaxInt64 {
+			return 0, true
+		}
+	default:
+		check := u * uint64(powerOf10[mag])
+		if check/uint64(powerOf10[mag]) != u || check > math.MaxInt64 {
+			return 0, true
+		}
+		u *= uint64(powerOf10[mag])
+	}
+
+	n = int64(u)
+	if d.neg {
+		n = -n
+	}
+	return n, false
 }

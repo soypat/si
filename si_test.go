@@ -1,6 +1,9 @@
 package si
 
-import "testing"
+import (
+	"math/rand"
+	"testing"
+)
 
 func TestFormatAppend(t *testing.T) {
 	var tests = []struct {
@@ -153,6 +156,26 @@ func TestIlog10(t *testing.T) {
 		got := ilog10(test.v)
 		if got != test.want {
 			t.Errorf("case %d: want %d, got %d with %d", i, test.want, got, test.v)
+		}
+	}
+}
+
+func TestFormatParseLoop(t *testing.T) {
+	rng := rand.New(rand.NewSource(0))
+	var buf [24]byte
+	for i := 0; i < 10000; i++ {
+		const baseUnits = PrefixAtto
+		v := rng.Int63() / 16
+		digits := ilog10(v) + 1
+		s := AppendFixed(buf[:0], v, baseUnits, 'f', digits)
+		got, n, err := ParseFixed(string(s), baseUnits)
+		if err != nil {
+			t.Fatalf("%s: %q", err, s)
+		} else if n != len(s) {
+			t.Fatalf("mismatch number of bytes read got %d, want %d for %q", n, len(s), s)
+		}
+		if got != v {
+			t.Errorf("format-parse loop failed for got %d, want %d for %q", got, v, s)
 		}
 	}
 }
