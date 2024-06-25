@@ -58,7 +58,25 @@ var exprune = [10]rune{
 }
 
 var (
-	defaultDimFormatter, _ = NewDimensionFormatter(DimensionFormatterConfig{
+	abstractDimFormatter, _ = NewDimensionFormatter(AbstractDimensionFormatterConfig())
+)
+
+// AbstractDimensionFormatConfig returns the abstract unit formatting configuration.
+func AbstractDimensionFormatterConfig() DimensionFormatterConfig {
+	return DimensionFormatterConfig{
+		Length:      "L",
+		Mass:        "M",
+		Time:        "T",
+		Temperature: "K",
+		Current:     "I",
+		Luminosity:  "J",
+		Amount:      "N",
+	}
+}
+
+// DefaultDimensionFormatter returns the SI formatter config.
+func DefaultDimensionFormatterConfig() DimensionFormatterConfig {
+	return DimensionFormatterConfig{
 		Length:      "m",
 		Mass:        "kg",
 		Time:        "s",
@@ -67,21 +85,7 @@ var (
 		Luminosity:  "cd",
 		Amount:      "mol",
 		Separator:   "·",
-	})
-	abstractDimFormatter, _ = NewDimensionFormatter(DimensionFormatterConfig{
-		Length:      "L",
-		Mass:        "M",
-		Time:        "T",
-		Temperature: "K",
-		Current:     "I",
-		Luminosity:  "J",
-		Amount:      "N",
-	})
-)
-
-// DefaultDimensionFormatter returns the SI formatter.
-func DefaultDimensionFormatter() *DimensionFormatter {
-	return defaultDimFormatter
+	}
 }
 
 // DimensionFormatter is an arrangement of unit representations.

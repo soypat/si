@@ -214,7 +214,7 @@ func TestFormatParseLoop(t *testing.T) {
 }
 
 func TestStringStuff(t *testing.T) {
-	si := DefaultDimensionFormatter()
+	si, _ := NewDimensionFormatter(DefaultDimensionFormatterConfig())
 	d, _ := NewDimension(1, 2, 3, 4, 5, 6, 7)
 	if si.StringDim(d) != "m·kg²·s³·K⁴·A⁵·cd⁶·mol⁷" {
 		t.Error("bad format", si.StringDim(d))
