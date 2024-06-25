@@ -58,47 +58,135 @@ var exprune = [10]rune{
 }
 
 var (
-	defaultDimFormatter, _  = NewDimensionFormatter("m", "kg", "s", "K", "A", "cd", "mol")
-	abstractDimFormatter, _ = NewDimensionFormatter("L", "M", "T", "K", "I", "J", "N")
+	defaultDimFormatter, _ = NewDimensionFormatter(DimensionFormatterConfig{
+		Length:      "m",
+		Mass:        "kg",
+		Time:        "s",
+		Temperature: "K",
+		Current:     "A",
+		Luminosity:  "cd",
+		Amount:      "mol",
+		Separator:   "·",
+	})
+	abstractDimFormatter, _ = NewDimensionFormatter(DimensionFormatterConfig{
+		Length:      "L",
+		Mass:        "M",
+		Time:        "T",
+		Temperature: "K",
+		Current:     "I",
+		Luminosity:  "J",
+		Amount:      "N",
+	})
 )
 
 // DefaultDimensionFormatter returns the SI formatter.
-func DefaultDimensionFormatter() DimensionFormatter {
+func DefaultDimensionFormatter() *DimensionFormatter {
 	return defaultDimFormatter
 }
 
 // DimensionFormatter is an arrangement of unit representations.
 type DimensionFormatter struct {
 	fmts [7]string
+	sep  string
+}
+
+type DimensionFormatterConfig struct {
+	Length      string
+	Mass        string
+	Time        string
+	Temperature string
+	Current     string
+	Luminosity  string
+	Amount      string
+
+	// Unit separator.
+	Separator string
 }
 
 // NewDimensionFormatter creates a new dimension formatter.
-func NewDimensionFormatter(Length, Mass, Time, Temperature, Current, Luminosity, Amount string) (DimensionFormatter, error) {
-	if Length == "" || Mass == "" || Time == "" || Temperature == "" || Current == "" || Luminosity == "" || Amount == "" {
-		return DimensionFormatter{}, errors.New("empty format string")
+func NewDimensionFormatter(cfg DimensionFormatterConfig) (*DimensionFormatter, error) {
+	if cfg.Length == "" || cfg.Mass == "" || cfg.Time == "" || cfg.Temperature == "" || cfg.Current == "" || cfg.Luminosity == "" || cfg.Amount == "" {
+		return nil, errors.New("empty format string")
 	}
-	return DimensionFormatter{
-		[7]string{
-			0: Length,
-			1: Mass,
-			2: Time,
-			3: Temperature,
-			4: Current,
-			5: Luminosity,
-			6: Amount,
+
+	return &DimensionFormatter{
+		sep: cfg.Separator,
+		fmts: [7]string{
+			0: cfg.Length,
+			1: cfg.Mass,
+			2: cfg.Time,
+			3: cfg.Temperature,
+			4: cfg.Current,
+			5: cfg.Luminosity,
+			6: cfg.Amount,
 		},
 	}, nil
 }
 
+// String returns a human readable representation of the DimensionFormatter.
+func (df *DimensionFormatter) String() string {
+	b := make([]byte, 0, 8*4) // 32 stores SI perfectly.
+	for i := range df.fmts {
+		b = append(b, abstractDimFormatter.fmts[i]...)
+		b = append(b, ':')
+		b = append(b, df.fmts[i]...)
+		if i != len(df.fmts)-1 {
+			b = append(b, ' ')
+		}
+	}
+	return string(b)
+}
+
+// StringDim returns the string representation of the dimension with df's formatting directive.
+func (df *DimensionFormatter) StringDim(dim Dimension) string {
+	if dim.IsDimensionless() {
+		return ""
+	}
+	return string(df.AppendFormat(make([]byte, 0, df.sizeofFormat(dim)), dim))
+}
+
+// sizeofFormat returns exact size of the printed string of dim with df formatting.
+func (df *DimensionFormatter) sizeofFormat(dim Dimension) int {
+	sizeof := 0
+	var printed bool
+	for i, exp := range dim.dims {
+		if exp == 0 {
+			// Exponent not printed.
+			continue
+		}
+		if printed {
+			sizeof += len(df.sep)
+		}
+		printed = true
+		// Size of unit string added.
+		sizeof += len(df.fmts[i])
+		// Size of exponent in bytes, exponents are 2 bytes in length.
+		if exp < 0 {
+			sizeof += 2
+		}
+		digits := ilog10(int64(exp)) + 1
+		sizeof += digits * 2
+	}
+	return sizeof
+}
+
 // AppendFormat formats a dimension with
-func (df DimensionFormatter) AppendFormat(b []byte, dim Dimension) []byte {
+func (df *DimensionFormatter) AppendFormat(b []byte, dim Dimension) []byte {
 	// Size of this buffer should fit -32767 (MaxInt16)
+	if dim.IsDimensionless() {
+		return b
+	}
 	var buf [8]byte
+	var lastPrinted bool
 	for i := range df.fmts {
 		dim := dim.dims[i]
 		if dim == 0 {
 			continue
 		}
+		if lastPrinted {
+			b = append(b, df.sep...)
+		}
+		lastPrinted = true
 		b = append(b, df.fmts[i]...)
 		if dim == 1 {
 			continue
@@ -121,11 +209,7 @@ func (df DimensionFormatter) AppendFormat(b []byte, dim Dimension) []byte {
 
 // String returns a human readable representation of the dimension using abstract unit letters (LMTKIJN).
 func (d Dimension) String() string {
-	if d.IsDimensionless() {
-		return ""
-	}
-	s := abstractDimFormatter.AppendFormat(make([]byte, 0, 8), d)
-	return string(s)
+	return abstractDimFormatter.StringDim(d)
 }
 
 // IsDimensionless returns true if d is dimensionless, that is to say all dimension exponents are zero.
@@ -243,7 +327,6 @@ func RuneToPrefix(r rune) (pfx Prefix, err error) {
 		pfx = PrefixExa
 	default:
 		err = errUnknownPrefix
-		err = errors.New("unknown prefix " + string(r))
 	}
 	return pfx, err
 }
