@@ -7,26 +7,30 @@ import (
 	"unicode/utf8"
 )
 
+type dimint = int8
+
 const (
-	maxunit = math.MaxInt16
+	maxunit = math.MaxInt8
 )
+
+var errDimOOB = errors.New("dimension exceeds storage space (-127..127)")
 
 // NewDimension creates a new dimension from the given exponents.
 func NewDimension(Length, Mass, Time, Temperature, ElectricCurrent, Luminosity, Amount int) (Dimension, error) {
 	if isDimOOB(Length) || isDimOOB(Mass) || isDimOOB(Time) ||
 		isDimOOB(Temperature) || isDimOOB(ElectricCurrent) ||
 		isDimOOB(Luminosity) || isDimOOB(Amount) {
-		return Dimension{}, errors.New("overflow of dimension storage")
+		return Dimension{}, errDimOOB
 	}
 	return Dimension{
-		dims: [7]int16{
-			0: int16(Length),
-			1: int16(Mass),
-			2: int16(Time),
-			3: int16(Temperature),
-			4: int16(ElectricCurrent),
-			5: int16(Luminosity),
-			6: int16(Amount),
+		dims: [7]dimint{
+			0: dimint(Length),
+			1: dimint(Mass),
+			2: dimint(Time),
+			3: dimint(Temperature),
+			4: dimint(ElectricCurrent),
+			5: dimint(Luminosity),
+			6: dimint(Amount),
 		},
 	}, nil
 }
@@ -37,9 +41,9 @@ func isDimOOB(dim int) bool {
 
 // Dimension represents the dimensions of a physical quantity.
 type Dimension struct {
-	// dims contains 7 int16's representing the exponent of primitive dimensions.
+	// dims contains 7 int8's representing the exponent of primitive dimensions.
 	// The ordering follows the result of Exponents method result.
-	dims [7]int16
+	dims [7]dimint
 }
 
 const negexp = '⁻'
@@ -94,6 +98,8 @@ type DimensionFormatter struct {
 	sep  string
 }
 
+// DimensionFormatterConfig specifies how the DimensionFormatter will
+// behave during formatting calls on the Dimension type.
 type DimensionFormatterConfig struct {
 	Length      string
 	Mass        string
@@ -217,7 +223,7 @@ func (d Dimension) String() string {
 }
 
 // IsDimensionless returns true if d is dimensionless, that is to say all dimension exponents are zero.
-func (d Dimension) IsDimensionless() bool { return d.dims == ([7]int16{}) }
+func (d Dimension) IsDimensionless() bool { return d.dims == ([7]dimint{}) }
 
 // ExpLength returns the exponent of the length dimension of d.
 func (d Dimension) ExpLength() int { return int(d.dims[0]) }

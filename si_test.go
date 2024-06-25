@@ -91,7 +91,7 @@ func TestFormatAppend_precorpus(t *testing.T) {
 }
 
 func TestNewDimension(t *testing.T) {
-	const testMaxUnit = 200
+	const testMaxUnit = 127
 	for l := -testMaxUnit; l < testMaxUnit; l += 11 {
 		for m := -testMaxUnit; m < testMaxUnit; m += 11 {
 			for k := -testMaxUnit; k < testMaxUnit; k += 11 {
