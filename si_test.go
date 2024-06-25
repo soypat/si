@@ -160,6 +160,35 @@ func TestIlog10(t *testing.T) {
 	}
 }
 
+func TestParseFixed(t *testing.T) {
+	var tests = []struct {
+		S      string
+		Prefix Prefix
+		Want   int64
+	}{
+		// Usual cases
+		0: {S: "1k", Prefix: PrefixMilli, Want: 1_000_000},
+		1: {S: "2M", Prefix: PrefixMilli, Want: 2_000_000_000},
+		2: {S: "1.0004M", Prefix: PrefixMilli, Want: 1_000_400_000},
+		// Special preceding dot cases.
+		3: {S: "0.10k", Prefix: PrefixMilli, Want: 100_000},
+		4: {S: "0.010k", Prefix: PrefixMilli, Want: 10_000},
+		5: {S: "0.0010k", Prefix: PrefixMilli, Want: 1_000},
+	}
+	for i, test := range tests {
+		if test.S == "" {
+			continue // Commented line.
+		}
+		v, _, err := ParseFixed(test.S, test.Prefix)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v != test.Want {
+			t.Errorf("case %d: got %d, want %d from %q with baseUnits=%d", i, v, test.Want, test.S, test.Prefix)
+		}
+	}
+}
+
 func TestFormatParseLoop(t *testing.T) {
 	rng := rand.New(rand.NewSource(0))
 	var buf [24]byte

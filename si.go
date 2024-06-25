@@ -389,6 +389,10 @@ CHARLOOP:
 			buf[bufPtr] = c
 			bufPtr++
 			wholeEnd++
+			if dotPos >= 0 {
+				// Digits correspond to decimal part, so subtract from exp.
+				d.exp--
+			}
 			continue
 		}
 		switch c {
@@ -443,7 +447,6 @@ CHARLOOP:
 	// Calculate exponent modifier from decimal point.
 	// Where bufPtr is length of number, dotPos is position of decimal w.r.t start.
 	//  xxx.xxxxxx gives dotPos=3, bufPtr=3+6 -> exp=-6
-	d.exp = -(bufPtr - dotPos)
 	d.base, err = strconv.ParseUint(string(buf[:bufPtr]), 10, 64)
 	if err != nil {
 		return 0, 0, err
