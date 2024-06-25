@@ -179,9 +179,12 @@ func TestParseFixed(t *testing.T) {
 		if test.S == "" {
 			continue // Commented line.
 		}
-		v, _, err := ParseFixed(test.S, test.Prefix)
+		v, n, err := ParseFixed(test.S, test.Prefix)
 		if err != nil {
 			t.Fatal(err)
+		}
+		if n != len(test.S) {
+			t.Errorf("case %d: bytes read mismatch, got %d want %d", i, n, len(test.S))
 		}
 		if v != test.Want {
 			t.Errorf("case %d: got %d, want %d from %q with baseUnits=%d", i, v, test.Want, test.S, test.Prefix)
