@@ -91,9 +91,10 @@ func TestFormatAppend_precorpus(t *testing.T) {
 }
 
 func TestNewDimension(t *testing.T) {
-	for l := -maxunit; l < maxunit; l += 11 {
-		for m := -maxunit; m < maxunit; m += 11 {
-			for k := -maxunit; k < maxunit; k += 11 {
+	const testMaxUnit = 200
+	for l := -testMaxUnit; l < testMaxUnit; l += 11 {
+		for m := -testMaxUnit; m < testMaxUnit; m += 11 {
+			for k := -testMaxUnit; k < testMaxUnit; k += 11 {
 				d, err := NewDimension(l, m, k, 4, 5, 6, 7)
 				if err != nil {
 					t.Fatal("dimension error", err)

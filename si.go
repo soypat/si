@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	maxunit = 200
+	maxunit = math.MaxInt16
 )
 
 // NewDimension creates a new dimension from the given exponents.
@@ -363,17 +363,12 @@ func (p Prefix) Character() (s rune) {
 	return s
 }
 
-// fixed point representation integer supported by this package.
-type fixed interface {
-	~int64 | ~int32
-}
-
 // AppendFixed formats a fixed-point number with a given magnitude base units and
 // appends it's representation to the argument buffer.
 //
 //	"123.456k" for value=123456, baseUnits=PrefixNone, prec=6
 //	"123k" for value=123456, baseUnits=PrefixNone, prec=3
-func AppendFixed[T fixed](b []byte, value T, baseUnits Prefix, fmt byte, prec int) []byte {
+func AppendFixed(b []byte, value int64, baseUnits Prefix, fmt byte, prec int) []byte {
 	switch {
 	case fmt != 'f':
 		return append(b, "<si!INVALID FMT>"...)
