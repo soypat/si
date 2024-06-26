@@ -386,6 +386,8 @@ func AppendFixed(b []byte, value int64, baseUnits Prefix, fmt byte, prec int) []
 		return append(b, "<si!LESS-EQ-ZERO PREC>"...)
 	case !baseUnits.IsValid():
 		return append(b, "<si!BAD BASE>"...)
+	case prec >= 21:
+		return append(b, "<si!LARGE PREC>"...)
 	case value == 0:
 		return append(b, '0')
 	}
@@ -426,6 +428,11 @@ func AppendFixed(b []byte, value int64, baseUnits Prefix, fmt byte, prec int) []
 			}
 		}
 	}
+	// Calculate new base.
+	baseUnits += Prefix(log10 - log10mod3)
+	if baseUnits > PrefixExa {
+		return append(b, "<si!UNREPRESENTABLE PREFIX>"...)
+	}
 
 	if isNegative {
 		b = append(b, '-')
@@ -446,8 +453,6 @@ func AppendFixed(b []byte, value int64, baseUnits Prefix, fmt byte, prec int) []
 		}
 	}
 
-	// Calculate new base.
-	baseUnits += Prefix(log10 - log10mod3)
 	if baseUnits != PrefixNone {
 		b = append(b, baseUnits.String()...)
 	}
