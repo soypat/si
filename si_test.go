@@ -298,3 +298,58 @@ func TestParseFixedErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestDimensionAlgebra(t *testing.T) {
+	// unit, _ := NewDimension(1, 1, 1, 1, 1, 1, 1)
+	var units [7]Dimension
+	for i := range units {
+		s := make([]int, 7)
+		s[i] = 1
+		units[i] = newdim(s)
+	}
+	var d Dimension
+	// Test multiplication.
+	for i, udim := range units {
+		k, err := MulDim(d, udim)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for j, exp := range k.Exponents() {
+			if j == i && exp != 1 {
+				t.Error("bad dimension add")
+			} else if j != i && exp != 0 {
+				t.Error("out of band dimension added")
+			}
+		}
+	}
+	// Test Division.
+	for i, udim := range units {
+		k, err := DivDim(d, udim)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for j, exp := range k.Exponents() {
+			if j == i && exp != -1 {
+				t.Error("bad dimension add")
+			} else if j != i && exp != 0 {
+				t.Error("out of band dimension added")
+			}
+		}
+		k = k.Inv()
+		for j, exp := range k.Exponents() {
+			if j == i && exp != 1 {
+				t.Error("bad dimension add")
+			} else if j != i && exp != 0 {
+				t.Error("out of band dimension added")
+			}
+		}
+	}
+}
+
+func newdim(dims []int) Dimension {
+	d, err := NewDimension(dims[0], dims[1], dims[2], dims[3], dims[4], dims[5], dims[6])
+	if err != nil {
+		panic(err)
+	}
+	return d
+}

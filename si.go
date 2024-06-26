@@ -40,6 +40,7 @@ func isDimOOB(dim int) bool {
 }
 
 // Dimension represents the dimensions of a physical quantity.
+// The zero value of a dimension is the dimensionless dimension (all exponents are zero).
 type Dimension struct {
 	// dims contains 7 int8's representing the exponent of primitive dimensions.
 	// The ordering follows the result of Exponents method result.
