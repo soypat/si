@@ -3,7 +3,6 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/soypat/si)](https://goreportcard.com/report/github.com/soypat/si)
 [![codecov](https://codecov.io/gh/soypat/si/branch/main/graph/badge.svg)](https://codecov.io/gh/soypat/si)
 [![Go](https://github.com/soypat/si/actions/workflows/go.yml/badge.svg)](https://github.com/soypat/si/actions/workflows/go.yml)
-[![stability-frozen](https://img.shields.io/badge/stability-frozen-blue.svg)](https://github.com/emersion/stability-badges#frozen)
 [![sourcegraph](https://sourcegraph.com/github.com/soypat/si/-/badge.svg)](https://sourcegraph.com/github.com/soypat/si?badge)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) 
 
