@@ -210,7 +210,7 @@ func (df *DimensionFormatter) AppendFormat(b []byte, dim Dimension) []byte {
 		for i := 0; i < len(numbuf); i++ {
 			offset := numbuf[i] - '0'
 			if offset > 9 {
-				panic("invalid char")
+				panic("invalid char") // Unreachable.
 			}
 			b = utf8.AppendRune(b, exprune[offset])
 		}
@@ -634,21 +634,21 @@ type ParseError struct {
 	error
 }
 
-func pe(s string) *ParseError {
+func makeParseError(s string) *ParseError {
 	return &ParseError{error: errors.New(s)}
 }
 
 func (pe *ParseError) Unwrap() error { return pe.error }
 
 var (
-	errPlusMinus              = pe("contains both plus and minus")
-	errMinusMinus             = pe("contains multiple minus symbols")
-	errNaN                    = pe("not a number")
-	errPlusPlus               = pe("contains multiple plus symbols")
-	errDotDot                 = pe("contains multiple decimal points")
-	errOverflowsInt64         = pe("exceeds maximum")
-	errOverflowsInt64Negative = pe("exceeds minimum")
-	errUnknownPrefix          = pe("unknown SI prefix")
+	errPlusMinus              = makeParseError("contains both plus and minus")
+	errMinusMinus             = makeParseError("contains multiple minus symbols")
+	errNaN                    = makeParseError("not a number")
+	errPlusPlus               = makeParseError("contains multiple plus symbols")
+	errDotDot                 = makeParseError("contains multiple decimal points")
+	errOverflowsInt64         = makeParseError("exceeds maximum")
+	errOverflowsInt64Negative = makeParseError("exceeds minimum")
+	errUnknownPrefix          = makeParseError("unknown SI prefix")
 )
 
 // Converts from decimal to int64.
