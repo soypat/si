@@ -161,6 +161,54 @@ func TestIlog10(t *testing.T) {
 	}
 }
 
+func TestFixedToFloat(t *testing.T) {
+	var tests = []struct {
+		V     int64
+		BaseU Prefix
+		Want  float64
+	}{
+		// Basic conversions.
+		0: {V: 1, BaseU: PrefixNone, Want: 1.0},
+		1: {V: 0, BaseU: PrefixNone, Want: 0.0},
+		2: {V: 1000, BaseU: PrefixNone, Want: 1000.0},
+		3: {V: -1000, BaseU: PrefixNone, Want: -1000.0},
+		4: {V: 1_000_000, BaseU: PrefixNone, Want: 1_000_000.0},
+		// Milli base (10^-3).
+		5:  {V: 1, BaseU: PrefixMilli, Want: 0.001},
+		6:  {V: 1000, BaseU: PrefixMilli, Want: 1.0},
+		7:  {V: 1_000_000, BaseU: PrefixMilli, Want: 1000.0},
+		8:  {V: 2500, BaseU: PrefixMilli, Want: 2.5},
+		9:  {V: 123_456, BaseU: PrefixMilli, Want: 123.456},
+		10: {V: -1000, BaseU: PrefixMilli, Want: -1.0},
+		// Kilo base (10^3).
+		11: {V: 1, BaseU: PrefixKilo, Want: 1000.0},
+		12: {V: 500, BaseU: PrefixKilo, Want: 500_000.0},
+		13: {V: 1000, BaseU: PrefixKilo, Want: 1_000_000.0},
+		14: {V: -2, BaseU: PrefixKilo, Want: -2000.0},
+		// Micro base (10^-6).
+		15: {V: 1, BaseU: PrefixMicro, Want: 0.000001},
+		16: {V: 1_000_000, BaseU: PrefixMicro, Want: 1.0},
+		17: {V: 500_000, BaseU: PrefixMicro, Want: 0.5},
+		// Mega base (10^6).
+		18: {V: 1, BaseU: PrefixMega, Want: 1_000_000.0},
+		19: {V: 2, BaseU: PrefixMega, Want: 2_000_000.0},
+		20: {V: 1000, BaseU: PrefixMega, Want: 1_000_000_000.0},
+		// Giga base (10^9).
+		21: {V: 1, BaseU: PrefixGiga, Want: 1_000_000_000.0},
+		22: {V: 5, BaseU: PrefixGiga, Want: 5_000_000_000.0},
+		// Extreme cases.
+		23: {V: 1, BaseU: PrefixAtto, Want: 1e-18},
+		24: {V: 1, BaseU: PrefixPeta, Want: 1e15},
+		25: {V: 1, BaseU: PrefixExa, Want: 1e18},
+	}
+	for i, test := range tests {
+		got := FixedToFloat(test.V, test.BaseU)
+		if got != test.Want {
+			t.Errorf("case %d: FixedToFloat(%d, %d) = %g, want %g", i, test.V, test.BaseU, got, test.Want)
+		}
+	}
+}
+
 func TestParseFixed(t *testing.T) {
 	var tests = []struct {
 		S     string
@@ -175,6 +223,44 @@ func TestParseFixed(t *testing.T) {
 		3: {S: "0.10k", BaseU: PrefixMilli, Want: 100_000},
 		4: {S: "0.010k", BaseU: PrefixMilli, Want: 10_000},
 		5: {S: "0.0010k", BaseU: PrefixMilli, Want: 1_000},
+		// Exponent notation with lowercase 'e'.
+		6:  {S: "2e5m", BaseU: PrefixMilli, Want: 200_000},
+		7:  {S: "3e2k", BaseU: PrefixMilli, Want: 300_000_000},
+		8:  {S: "1e3", BaseU: PrefixMilli, Want: 1_000_000},
+		9:  {S: "5e1m", BaseU: PrefixMilli, Want: 50},
+		10: {S: "1e0k", BaseU: PrefixMilli, Want: 1_000_000},
+		// Exponent notation with uppercase 'E'.
+		11: {S: "2E5m", BaseU: PrefixMilli, Want: 200_000},
+		12: {S: "3E2k", BaseU: PrefixMilli, Want: 300_000_000},
+		13: {S: "1E3", BaseU: PrefixMilli, Want: 1_000_000},
+		// Negative exponents.
+		14: {S: "5e-2k", BaseU: PrefixMilli, Want: 50_000},
+		15: {S: "2e-3m", BaseU: PrefixMilli, Want: 0}, // 0.002 milli -> rounds to 0
+		16: {S: "123e-1k", BaseU: PrefixMilli, Want: 12_300_000},
+		17: {S: "5E-1m", BaseU: PrefixMilli, Want: 1}, // 0.5 milli -> rounds to 1
+		// Positive exponents with explicit '+' sign.
+		18: {S: "2e+5m", BaseU: PrefixMilli, Want: 200_000},
+		19: {S: "3E+2k", BaseU: PrefixMilli, Want: 300_000_000},
+		20: {S: "1e+0k", BaseU: PrefixMilli, Want: 1_000_000},
+		// Exponent notation with decimal points.
+		21: {S: "1.5e3k", BaseU: PrefixMilli, Want: 1_500_000_000},
+		22: {S: "2.5e2m", BaseU: PrefixMilli, Want: 250},
+		23: {S: "1.23e4", BaseU: PrefixMilli, Want: 12_300_000},
+		24: {S: "4.56e-1k", BaseU: PrefixMilli, Want: 456_000},
+		// Different base units.
+		25: {S: "1e6", BaseU: PrefixNone, Want: 1_000_000},
+		26: {S: "2e3k", BaseU: PrefixNone, Want: 2_000_000},
+		27: {S: "5e-3M", BaseU: PrefixNone, Want: 5_000},
+		28: {S: "1e11m", BaseU: PrefixKilo, Want: 100_000}, // 1e11 milli = 1e8 / 1e3 kilo = 1e5 = 100k
+		// Multi-digit exponents.
+		29: {S: "1e10", BaseU: PrefixMilli, Want: 10_000_000_000_000},
+		30: {S: "2e12m", BaseU: PrefixMilli, Want: 2_000_000_000_000},
+		// Peta and Exa prefixes (uppercase 'P' and 'E' without exponent notation).
+		31: {S: "2P", BaseU: PrefixMilli, Want: 2_000_000_000_000_000_000},
+		32: {S: "1P", BaseU: PrefixNone, Want: 1_000_000_000_000_000},
+		33: {S: "3P", BaseU: PrefixKilo, Want: 3_000_000_000_000},
+		34: {S: "1E", BaseU: PrefixKilo, Want: 1_000_000_000_000_000},
+		35: {S: "9E", BaseU: PrefixMega, Want: 9_000_000_000_000},
 	}
 	for i, test := range tests {
 		if test.S == "" {
@@ -241,10 +327,10 @@ func TestAppendFixedErrors(t *testing.T) {
 		3: {V: 1234, Prec: 1, BaseU: 1},
 		4: {V: 1234, Prec: 1, BaseU: PrefixExa + 3},
 		5: {V: 1234, Prec: 1, BaseU: PrefixAtto - 3},
-		// Exceed base units upwards.
+		// Exceed base units upwards (beyond PrefixExa).
 		6: {V: 1234, Prec: 3, BaseU: PrefixExa},
-		7: {V: 1234567, Prec: 1, BaseU: PrefixTera},
-		8: {V: 1234567, Prec: 3, BaseU: PrefixTera},
+		7: {V: 1234567, Prec: 1, BaseU: PrefixPeta},
+		8: {V: 1234567, Prec: 3, BaseU: PrefixPeta},
 	}
 	var buf [64]byte
 	for i, test := range tests {
@@ -285,6 +371,16 @@ func TestParseFixedErrors(t *testing.T) {
 		15: {S: "12345678901234567", BaseU: PrefixMilli},
 		16: {S: "12345678901234567.000", BaseU: PrefixMilli},
 		17: {S: "12345678901234", BaseU: PrefixMicro},
+		// Bad exponent notation.
+		18: {S: "2e"},    // Lowercase 'e' at end is unknown prefix (not Exa).
+		19: {S: "2e-"},   // Missing exponent digits after sign.
+		20: {S: "2e+"},   // Missing exponent digits after sign.
+		21: {S: "2E-"},   // Missing exponent digits after sign (uppercase).
+		22: {S: "2E+"},   // Missing exponent digits after sign (uppercase).
+		23: {S: "2e--3"}, // Double negative in exponent.
+		24: {S: "2e++3"}, // Double plus in exponent.
+		25: {S: "2e+-3"}, // Plus and minus in exponent.
+		26: {S: "2e-+3"}, // Minus and plus in exponent.
 	}
 	for i, test := range tests {
 		v, n, err := ParseFixed(test.S, test.BaseU)

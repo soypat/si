@@ -296,7 +296,8 @@ type Prefix int8
 
 // Package unit prefix definitions.
 const (
-	PrefixAtto Prefix = -18 + iota*3
+	prefixInvalidMin Prefix = -21 + iota*3
+	PrefixAtto
 	PrefixFemto
 	PrefixPico
 	PrefixNano
@@ -307,8 +308,34 @@ const (
 	PrefixMega
 	PrefixGiga
 	PrefixTera
+	PrefixPeta
 	PrefixExa
+	prefixInvalidMax
 )
+
+// Prefix errors.
+var (
+	errPrefixNotMod3  = errors.New("SI prefix must be multiple of 3")
+	errPrefixTooLarge = errors.New("SI prefix too large to represent")
+	errPrefixTooSmall = errors.New("SI prefix too small/negative to represent")
+)
+
+// ExponentToPrefix converts exponent to a SI prefix.
+// Exponent must be modulus of 3 and representable by this package's type.
+// i.e:
+//   - -3 returns [PrefixMilli]
+//   - 3 returns [PrefixKilo]
+//   - 0 returns [PrefixNone]
+func ExponentToPrefix(exp int) (pfx Prefix, err error) {
+	if exp%3 != 0 {
+		return pfx, errPrefixNotMod3
+	} else if pfx >= prefixInvalidMax {
+		return pfx, errPrefixTooLarge
+	} else if pfx <= prefixInvalidMin {
+		return pfx, errPrefixTooSmall
+	}
+	return Prefix(exp), nil
+}
 
 // RuneToPrefix interprets the argument rune as an SI prefix.
 // It does not parse PrefixNone.
@@ -334,6 +361,8 @@ func RuneToPrefix(r rune) (pfx Prefix, err error) {
 		pfx = PrefixGiga
 	case 'T':
 		pfx = PrefixTera
+	case 'P':
+		pfx = PrefixPeta
 	case 'E':
 		pfx = PrefixExa
 	default:
@@ -353,12 +382,18 @@ func (p Prefix) String() string {
 	if p == PrefixMicro {
 		return "μ"
 	}
-	const pfxTable = "a!!f!!p!!n!!u!!m!! !!k!!M!!G!!T!!E"
+	const pfxTable = "a!!f!!p!!n!!u!!m!! !!k!!M!!G!!T!!P!!E"
 	offset := int(p - PrefixAtto)
 	if offset < 0 || offset >= len(pfxTable) || pfxTable[offset] == '!' {
 		return "<si!invalid Prefix>"
 	}
 	return pfxTable[offset : offset+1]
+}
+
+// Exponent returns the exponent representing the prefix.
+// ie: [PrefixMilli] 'm' for milli returns -3, [PrefixKilo] 'k' for kilo returns 3. [PrefixNone] returns 0.
+func (p Prefix) Exponent() (exp int) {
+	return int(p)
 }
 
 // Character returns the single character SI representation of the unit prefix.
@@ -460,8 +495,38 @@ func AppendFixed(b []byte, value int64, baseUnits Prefix, fmt byte, prec int) []
 	return b
 }
 
+// FixedToFloat converts a fixed-point integer representation to a floating point number.
+// The fixedValue is interpreted as being in the units specified by baseUnits.
+//
+// Examples:
+//   - FixedToFloat(1_000_000, PrefixMilli) returns 1000.0 (1M milli = 1k base units)
+//   - FixedToFloat(500, PrefixKilo) returns 500000.0 (500 kilo = 500k base units)
+//   - FixedToFloat(2500, PrefixMilli) returns 2.5 (2500 milli = 2.5 base units)
+//   - FixedToFloat(1, PrefixNone) returns 1.0 (1 base unit)
+func FixedToFloat(fixedValue int64, baseUnits Prefix) float64 {
+	return float64(fixedValue) * math.Pow10(baseUnits.Exponent())
+}
+
 // ParseFixed parses a decimal point representation with or without unit prefix
 // and converts it to a fixed point representation with `baseUnits` as the base units.
+//
+// Supported input formats:
+//   - Simple numbers: "123", "0.456"
+//   - With SI prefix: "2k", "3.5M", "100m"
+//   - Exponent notation (lowercase): "2e5", "1.5e3k", "3e-2m"
+//   - Exponent notation (uppercase): "2E5", "1.5E3k", "3E-2m"
+//   - With explicit sign: "+123", "-456", "2e+5"
+//
+// Special case - 'E' character disambiguation:
+// Uppercase 'E' can represent either exponent notation or the Exa (10^18) prefix.
+// ParseFixed uses lookahead to distinguish between them:
+//   - "2E3m" is parsed as exponent: 2×10³ milli (E followed by digit)
+//   - "2E-3m" is parsed as exponent: 2×10⁻³ milli (E followed by sign+digit)
+//   - "2E" is parsed as Exa prefix: 2×10¹⁸ (E at end or not followed by exponent character)
+//
+// The function maintains fixed-point precision throughout the conversion process.
+// Returns the parsed value in baseUnits, the number of bytes consumed from the input,
+// and any error encountered during parsing.
 func ParseFixed(s string, baseUnits Prefix) (value int64, readBytes int, err error) {
 	var buf [20]byte
 	// s indices.
@@ -529,8 +594,67 @@ CHARLOOP:
 		return 0, 0, err
 	}
 	readBytes = wholeEnd
+
+	// Parse exponent notation if present (e.g., "2e5" or "3E-2").
+	// Use lookahead to avoid conflict with 'E' as Exa prefix: only treat as exponent
+	// if followed by digit, '+', or '-'.
+	if readBytes < len(s) && (s[readBytes] == 'e' || s[readBytes] == 'E') {
+		// Lookahead to check if this is actually exponent notation.
+		if readBytes+1 < len(s) {
+			nextChar := s[readBytes+1]
+			isExpChar := ('0' <= nextChar && nextChar <= '9') || nextChar == '+' || nextChar == '-'
+			if !isExpChar {
+				// Not exponent notation, let prefix parser handle it.
+				goto PREFIX_PARSE
+			}
+		} else {
+			// 'e' or 'E' at end of string, not exponent notation.
+			goto PREFIX_PARSE
+		}
+
+		readBytes++ // skip 'e' or 'E'
+
+		// Parse optional exponent sign.
+		expNeg := false
+		if s[readBytes] == '-' {
+			expNeg = true
+			readBytes++
+			if readBytes >= len(s) {
+				return 0, 0, errNaN
+			}
+		} else if s[readBytes] == '+' {
+			readBytes++
+			if readBytes >= len(s) {
+				return 0, 0, errNaN
+			}
+		}
+
+		// Parse exponent digits.
+		expStart := readBytes
+		for readBytes < len(s) && '0' <= s[readBytes] && s[readBytes] <= '9' {
+			readBytes++
+		}
+
+		if readBytes == expStart {
+			return 0, 0, errNaN
+		}
+
+		expVal, err := strconv.Atoi(s[expStart:readBytes])
+		if err != nil {
+			return 0, 0, errOverflowsInt64
+		}
+
+		if expNeg {
+			expVal = -expVal
+		}
+
+		d.exp += expVal
+	}
+
+PREFIX_PARSE:
+
 	var incomingPrefix Prefix
-	if wholeEnd < len(s) {
+	if readBytes < len(s) {
 		r, n := utf8.DecodeRuneInString(s[readBytes:])
 		incomingPrefix, err = RuneToPrefix(r)
 		if err != nil {
@@ -640,6 +764,7 @@ func makeParseError(s string) *ParseError {
 
 func (pe *ParseError) Unwrap() error { return pe.error }
 
+// parsing errors.
 var (
 	errPlusMinus              = makeParseError("contains both plus and minus")
 	errMinusMinus             = makeParseError("contains multiple minus symbols")
