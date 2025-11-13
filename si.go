@@ -382,7 +382,7 @@ func (p Prefix) String() string {
 	if p == PrefixMicro {
 		return "μ"
 	}
-	const pfxTable = "a!!f!!p!!n!!u!!m!! !!k!!M!!G!!T!!P!!E"
+	const pfxTable = "a!!f!!p!!n!!u!!m!! !!k!!M!!G!!T!!E"
 	offset := int(p - PrefixAtto)
 	if offset < 0 || offset >= len(pfxTable) || pfxTable[offset] == '!' {
 		return "<si!invalid Prefix>"
@@ -616,13 +616,14 @@ CHARLOOP:
 
 		// Parse optional exponent sign.
 		expNeg := false
-		if s[readBytes] == '-' {
+		switch s[readBytes] {
+		case '-':
 			expNeg = true
 			readBytes++
 			if readBytes >= len(s) {
 				return 0, 0, errNaN
 			}
-		} else if s[readBytes] == '+' {
+		case '+':
 			readBytes++
 			if readBytes >= len(s) {
 				return 0, 0, errNaN
